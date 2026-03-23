@@ -342,37 +342,41 @@ npm run build
 
 ---
 
-## Offene Fragen
+## Entscheidungen (nach Reifegrad)
 
-Die folgenden Fragen müssen noch entschieden werden:
+### 1. Spieler-Identifikation
 
-### 1. Wie werden Spieler identifiziert?
+| Reifegrad | Lösung | Beschreibung |
+|-----------|--------|-------------|
+| **Grad 1** | Freitext | Spieler name frei eingeben |
+| **Grad 2** | Lokale DB/Cache | Speicherung für spätere Spiele auf dem Gerät |
+| **Grad 3** | Server-Login | Login an selbst-gehostetem Server, Spieler-Daten auslesen |
 
-| Option | Pros | Cons |
-|--------|------|------|
-| Freitext | Flexibel | Keine Verlaufsdaten |
-| Lokale DB | Historie möglich | Mehr Komplexität |
-| Server-Login | Cloud-Sync | Grad 3 Feature |
+### 2. Commander-Eingabe
 
-### 2. Commander-Eingabe?
+| Reifegrad | Lösung | Beschreibung |
+|-----------|--------|-------------|
+| **Grad 1** | Freitext | Commander name frei eingeben |
+| **Grad 2** | Scryfall-Autocomplete | Offline-Liste mit Autocomplete durch Scryfall validiert |
+| **Grad 3** | Server-Login | Decks und Commander vom Server laden |
 
-| Option | Pros | Cons |
-|--------|------|------|
-| Freitext | Einfach | Keine Validierung |
-| Scryfall-Autocomplete | Korrekte Namen | Extra API-Call |
-| Offline-Liste | Schnell | Veraltet möglich |
+### 3. Mehrspieler-Support
 
-### 3. Mehrspieler-Support?
+| Reifegrad | Lösung | Beschreibung |
+|-----------|--------|-------------|
+| **Grad 1** | Kein Sync | Nur lokales Spiel auf einem Gerät |
+| **Grad 2** | Entfallen | App bleibt autark, kein Live-Sync zwischen Geräten |
+| **Grad 3** | Server-Export | Export der Spieldaten an Server; Lesen von Spielern/Decks vom Server |
 
-- Sync über lokales Netzwerk?
-- Server-basierter Sync?
-- Nur lokales Spiel?
+> **Entscheidung**: Die App bleibt grundsätzlich autark. Lediglich der Export von Spieldaten an einen Server und das Auslesen von gespeicherten Spielern/Decks ist von Bedeutung. Kein Live-Multiplayer-Sync.
 
-### 4. Plattform-Ziel?
+### 4. Plattform-Ziel
 
-- Primär Mobile (iOS/Android PWA)?
-- Desktop unterstützend?
-- Touch-first vs. Mouse-friendly?
+| Reifegrad | Lösung | Beschreibung |
+|-----------|--------|-------------|
+| **Grad 1** | Browser | Primär Browser-basiert, maximale Kompatibilität |
+| **Grad 2** | Browser + Mobile | Optimierung für Smartphones/Tablets |
+| **Grad 3** | Native Apps | Optional: Android/iOS App-Entwicklung |
 
 ---
 
