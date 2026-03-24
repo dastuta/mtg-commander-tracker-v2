@@ -1,9 +1,19 @@
 # MTG Commander Tracker - Daten-Schema
 
-> **Version**: 0.2.0  
+> **Version**: 0.5.0  
 > **Basierend auf**: [MTG Commander Ecosystem](https://github.com/dastuta/mtg-commander-ecosystem)
 
 Dieses Dokument beschreibt das JSON-Format für Spielexporte.
+
+## Philosophie: Daten-Reifegrad
+
+Die Komplexität der Daten orientiert sich am **App-Reifegrad**:
+
+- **Grad 1**: Basis-Funktionalität, minimaler Datensatz
+- **Grad 2**: Erweiterte Features, mehr Daten
+- **Grad 3**: Vollständige Daten für Statistik-Tools
+
+---
 
 ## Übersicht
 
@@ -11,7 +21,6 @@ Dieses Dokument beschreibt das JSON-Format für Spielexporte.
 Game
 ├── meta          # Spiel-Metadaten
 ├── players       # Spieler-Liste
-├── turns         # Zug-Historie
 ├── actions       # Alle Aktionen (chronologisch)
 ├── finalState    # Endzustand
 └── defeatedPlayers  # Besiegte Spieler
@@ -19,14 +28,64 @@ Game
 
 ---
 
-## Vollständige Struktur
+## Grad 1: Minimal
 
 ```json
 {
   "version": "1.0.0",
   "type": "game",
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "createdAt": "2024-01-15T19:30:00Z",
+  "id": "game-001",
+  "createdAt": "2024-01-15T14:00:00Z",
+  
+  "meta": {
+    "format": "commander",
+    "date": "2024-01-15",
+    "duration": 3600,
+    "winningPlayerId": "player-1",
+    "winningReason": "last_standing"
+  },
+  
+  "players": [
+    { "id": "player-1", "name": "Alice", "seat": 1, "life": 40, "poison": 0, "isDefeated": false, "isWinner": true },
+    { "id": "player-2", "name": "Bob", "seat": 2, "life": 0, "poison": 0, "isDefeated": true, "isWinner": false }
+  ],
+  
+  "actions": [
+    { "id": "a-001", "turn": 1, "source": "player-1", "target": "player-2", "type": "damage", "value": 5 },
+    { "id": "a-002", "turn": 3, "source": "player-2", "target": "player-1", "type": "heal", "value": 3 }
+  ],
+  
+  "finalState": {
+    "life": { "player-1": 40, "player-2": 0 },
+    "poison": { "player-1": 0, "player-2": 0 }
+  },
+  
+  "defeatedPlayers": []
+}
+```
+
+**Grad 1 Action:**
+```typescript
+interface Action {
+  id: string;       // Eindeutige ID (z.B. "a-001")
+  turn: number;     // Zugnummer
+  source: string;   // Spieler-ID
+  target: string;   // Spieler-ID
+  type: 'damage' | 'heal';
+  value: number;    // Betrag
+}
+```
+
+---
+
+## Grad 2: Erweitert
+
+```json
+{
+  "version": "1.0.0",
+  "type": "game",
+  "id": "game-001",
+  "createdAt": "2024-01-15T14:00:00Z",
   
   "meta": {
     "format": "commander",
@@ -35,94 +94,240 @@ Game
     "endTime": "2024-01-15T15:00:00Z",
     "duration": 3600,
     "winningPlayerId": "player-1",
-    "winningReason": "last_standing",
-    "groupId": null,
-    "notes": null
+    "winningReason": "last_standing"
   },
   
   "players": [
-    { 
-      "id": "player-1", 
-      "name": "Alice", 
-      "commander": { "name": "Emiel the Blessed", "scryfallId": "abc123" },
-      "seat": 1,
-      "life": 28,
-      "poison": 0,
-      "isDefeated": false,
-      "isWinner": true 
-    }
+    { "id": "player-1", "name": "Alice", "commander": "Edgar Markov", "seat": 1, "life": 35, "poison": 0, "isDefeated": false, "isWinner": true },
+    { "id": "player-2", "name": "Bob", "commander": "Winota", "seat": 2, "life": 0, "poison": 0, "isDefeated": true, "isWinner": false }
   ],
   
-  "turns": [
+  "actions": [
     { 
-      "number": 1, 
-      "playerId": "player-1",
-      "playerName": "Alice",
-      "startTime": "2024-01-15T14:00:00Z", 
-      "endTime": "2024-01-15T14:05:00Z",
-      "duration": 300
+      "id": "a-001", 
+      "turn": 1, 
+      "timestamp": "2024-01-15T14:05:00Z",
+      "source": "player-1", 
+      "target": "player-2", 
+      "type": "damage", 
+      "value": 5,
+      "previousLife": 40,
+      "resultingLife": 35
+    },
+    { 
+      "id": "a-002", 
+      "turn": 4, 
+      "timestamp": "2024-01-15T14:20:00Z",
+      "source": "player-1", 
+      "target": "player-2", 
+      "type": "poison", 
+      "value": 3,
+      "previousPoison": 0,
+      "resultingPoison": 3
+    },
+    { 
+      "id": "a-003", 
+      "turn": 6, 
+      "timestamp": "2024-01-15T14:35:00Z",
+      "source": "player-1", 
+      "target": "player-2", 
+      "type": "commander", 
+      "value": 7,
+      "cardName": "Edgar Markov",
+      "totalDamageFromSource": 14
     }
   ],
-  
-  "actions": [],
   
   "finalState": {
-    "life": { "player-1": 28, "player-2": 0 },
+    "life": { "player-1": 35, "player-2": 0 },
     "poison": { "player-1": 0, "player-2": 0 },
-    "commanderDamage": { "player-2-player-1": 9 }
+    "commanderDamage": { "player-1-player-2": 14 }
   },
   
-  "defeatedPlayers": []
+  "defeatedPlayers": [
+    { "playerId": "player-2", "reason": "life", "turnEliminated": 8 }
+  ]
 }
 ```
 
 ---
 
-## Action Types
+## Grad 3: Vollständig
 
-| Type | Beschreibung | Implementierung |
-|------|-------------|------------------|
-| `damage` | Direkter Schaden | Lebenspunkte des Ziels um X reduzieren |
-| `heal` | Lebensgewinn | Lebenspunkte des Ziels um X erhöhen |
-| `poison` | Giftzähler | Gift-Variable des Ziels um X erhöhen |
-| `commander` | Commander-Schaden | Commander-Variable (Paar Quelle+Ziel) um X erhöhen |
-| `drain_heal` | Lebensentzug | Alle Gegner -X Leben, Selbst +X Leben pro Gegner |
-| `lifelink_heal` | Lebensdiebstahl | Ziel -X Leben, Selbst +X Leben |
-| `counter` | Custom-Zähler | Benutzerdefinierte Variable (Experience, Energy, etc.) |
-| `defeat` | **Manueller Button** | Spieler-Status auf "defeated" setzen |
-| `victory` | **Manueller Button** | Spiel beenden, Gewinner festlegen |
-
-**Wichtig**: `defeat` und `victory` sind **ausschließlich manuelle Aktionen**. 
-MTG-Karteneffekte können Spieler direkt besiegen oder zum Gewinner machen - 
-dies wird über UI-Buttons ausgelöst, NICHT automatisch durch Lebenspunkte.
-
-**Geplant für Zukunft (Grad 3+):** `token`, `phase`, `roll`, `coin`
+Zusätzlich zu Grad 2:
+- Komplexe Aktionen (`drain_heal`, `lifelink_heal`)
+- Multi-Target Aktionen mit `effects[]`
+- Custom-Counter
+- Detaillierte `reason`- und `cardName`-Felder
 
 ---
 
 ## Action Strukturen
 
-### Simple Action (Schaden/Heilung)
+### Grad 1 Action
 
 ```json
-{
-  "id": "action-001",
-  "turnNumber": 5,
+{ "id": "a-001", "turn": 1, "source": "p1", "target": "p2", "type": "damage", "value": 5 }
+```
+
+### Grad 2 Action
+
+```json
+{ 
+  "id": "a-001", 
+  "turn": 5, 
   "timestamp": "2024-01-15T14:30:00Z",
-  "type": "damage",
-  "source": { "type": "player", "playerId": "player-1", "playerName": "Alice" },
-  "targets": [
-    { "type": "player", "playerId": "player-2", "playerName": "Bob" }
-  ],
+  "source": "p1", 
+  "target": "p2", 
+  "type": "damage", 
   "value": 5,
-  "previousValue": 40,
-  "resultingValue": 35
+  "previousLife": 40,
+  "resultingLife": 35
 }
 ```
 
-### Commander Damage
+### Grad 2: Commander Damage
 
 ```json
+{ 
+  "id": "a-003", 
+  "turn": 6, 
+  "timestamp": "2024-01-15T14:35:00Z",
+  "source": "p1", 
+  "target": "p2", 
+  "type": "commander", 
+  "value": 7,
+  "cardName": "Edgar Markov",
+  "totalDamageFromSource": 14
+}
+```
+
+### Grad 3: Multi-Target (Drain Heal)
+
+```json
+{ 
+  "id": "a-010", 
+  "turn": 10, 
+  "timestamp": "2024-01-15T15:10:00Z",
+  "source": "p1", 
+  "type": "drain_heal", 
+  "value": 3,
+  "targets": ["p2", "p3", "p4"],
+  "effects": [
+    { "target": "p1", "action": "heal", "value": 9 },
+    { "target": "p2", "action": "damage", "value": 3 },
+    { "target": "p3", "action": "damage", "value": 3 },
+    { "target": "p4", "action": "damage", "value": 3 }
+  ]
+}
+```
+
+---
+
+## Action Types (nach Grad)
+
+| Type | Beschreibung | Grad |
+|------|-------------|------|
+| `damage` | Schaden an Leben | 1 |
+| `heal` | Lebensgewinn | 1 |
+| `poison` | Giftzähler | 2 |
+| `commander` | Commander-Schaden | 2 |
+| `drain_heal` | Lebensentzug | 3 |
+| `lifelink_heal` | Lebensdiebstahl | 3 |
+| `counter` | Custom-Zähler | 3 |
+| `defeat` | Manueller Button | 2 |
+| `victory` | Manueller Button | 2 |
+
+---
+
+## Defeat Reasons
+
+| Reason | Beschreibung |
+|--------|--------------|
+| `life` | Leben auf 0 |
+| `poison` | Gift ≥ 10 |
+| `commander_damage` | CMD-Schaden ≥ 21 |
+| `concession` | Spieler gibt auf |
+| `other` | Anderer Grund |
+
+## Winning Reasons
+
+| Reason | Beschreibung |
+|--------|--------------|
+| `last_standing` | Letzter verbleibender |
+| `concession` | Alle geben auf |
+| `agreed` | Einvernehmlich |
+| `special_effect` | Karten-Effekt |
+
+---
+
+## TypeScript Interfaces
+
+### Grad 1
+
+```typescript
+interface Action {
+  id: string;
+  turn: number;
+  source: string;    // Spieler-ID
+  target: string;   // Spieler-ID
+  type: 'damage' | 'heal';
+  value: number;
+}
+```
+
+### Grad 2
+
+```typescript
+interface Action {
+  id: string;
+  turn: number;
+  timestamp: string;  // ISO 8601
+  source: string;
+  target: string;
+  type: ActionType;
+  value: number;
+  
+  // Optional: Grad 2+
+  previousLife?: number;
+  resultingLife?: number;
+  cardName?: string;
+  totalDamageFromSource?: number;
+  reason?: string;
+}
+```
+
+### Grad 3
+
+```typescript
+interface Action {
+  id: string;
+  turn: number;
+  timestamp: string;
+  source: string;
+  target: string;
+  type: ActionType;
+  value: number;
+  
+  // Grad 2+
+  previousLife?: number;
+  resultingLife?: number;
+  cardName?: string;
+  totalDamageFromSource?: number;
+  
+  // Grad 3+
+  targets?: string[];        // Multi-Target
+  effects?: ActionEffect[];  // Einzelne Effekte
+  reason?: string;
+}
+
+interface ActionEffect {
+  target: string;
+  action: 'damage' | 'heal' | 'poison' | 'commander';
+  value: number;
+}
+```
+```
 {
   "id": "action-002",
   "turnNumber": 6,

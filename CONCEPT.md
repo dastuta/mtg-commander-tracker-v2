@@ -59,7 +59,7 @@ Die App folgt einem **Reifegrad-Modell** (Maturity Model). Die Kern-Architektur 
 | PWA | Installierbar auf Mobile/Desktop | Should Have |
 | Dark Mode | Standard dunkles Theme | Nice to Have |
 
-#### Datenmodell (Grad 1)
+#### Datenmodell (Grad 1) - Simplified
 
 ```typescript
 interface Game {
@@ -77,9 +77,7 @@ interface Game {
   
   players: Player[];
   
-  turns: Turn[];
-  
-  actions: Action[];           // Alle Aktionen (für Grad 1: nur damage/heal)
+  actions: Action[];           // Alle Aktionen (chronologisch)
   
   finalState: FinalState;
 }
@@ -87,34 +85,66 @@ interface Game {
 interface Player {
   id: string;
   name: string;
-  commander: string | null;
+  commander: string | null;   // Grad 1: null
   seat: number;
   life: number;                // Start: 40
+  poison: number;              // Grad 1: 0
+  isDefeated: boolean;
   isWinner: boolean;
 }
 
-interface Turn {
-  number: number;
-  playerId: string;
-  startTime: string;
-  endTime: string | null;
-}
-
 interface Action {
-  id: string;
-  turnNumber: number;
-  timestamp: string;
-  type: 'damage' | 'heal';    // Grad 1: Nur diese beiden
-  source: { playerId: string; playerName: string } | null;
-  targets: { playerId: string; playerName: string }[];
-  value: number;
-  previousValue: number;
-  resultingValue: number;
+  id: string;                  // Eindeutige ID (z.B. "a-001")
+  turn: number;                // Zugnummer
+  source: string;               // Spieler-ID
+  target: string;               // Spieler-ID
+  type: 'damage' | 'heal';    // Grad 1: Nur diese
+  value: number;                // Betrag
 }
 
 interface FinalState {
   life: Record<string, number>; // playerId -> life
+  poison: Record<string, number>; // playerId -> poison
 }
+```
+
+#### Reifegrad der Daten
+
+Die App folgt dem Prinzip: **Basis muss funktionieren, mehr Daten sind optional.**
+
+| Reifegrad | Aktionen | Details |
+|-----------|----------|---------|
+| **Grad 1** | Minimal | Nur `source`, `target`, `type`, `value` |
+| **Grad 2** | Erweitert | + `timestamp`, `turns`, `poison`, `commander` |
+| **Grad 3** | Vollständig | + `effects[]`, `cardName`, `reason`, Custom-Counter |
+
+**Beispiel für Grad 1:**
+```json
+{
+  "actions": [
+    { "id": "a-001", "turn": 1, "source": "p1", "target": "p2", "type": "damage", "value": 5 },
+    { "id": "a-002", "turn": 2, "source": "p2", "target": "p1", "type": "heal", "value": 3 }
+  ]
+}
+```
+
+**Beispiel für Grad 2+:**
+```json
+{
+  "actions": [
+    { 
+      "id": "a-001", 
+      "turn": 1, 
+      "timestamp": "2024-01-15T14:05:00Z",
+      "source": { "playerId": "p1", "playerName": "Alice" },
+      "target": { "playerId": "p2", "playerName": "Bob" },
+      "type": "damage",
+      "value": 5,
+      "cardName": "Lightning Bolt"
+    }
+  ]
+}
+```
 ```
 
 #### Tech Stack (Grad 1)
@@ -133,48 +163,35 @@ interface FinalState {
 
 Jede Aktion im Spiel wird als eigenständiger Eintrag gespeichert. Dies ermöglicht:
 
-1. **Undo/Redo**: Jede Aktion kann rückgängig gemacht werden
+1. **Undo/Redo**: Letzte Aktion kann rückgängig gemacht werden
 2. **Action Log**: Vollständige Historie während des Spiels einsehbar
 3. **Export**: Alle Aktionen werden in JSON exportiert
 
-#### Reihenfolge & Zeitstempel
+#### Daten-Reifegrad
 
-Die Reihenfolge der Aktionen ist **kritisch** für:
-- **Undo/Redo**: Letzte Aktion kann mit "Undo" rückgängig gemacht werden
-- **Statistik**: Analyse des Spielverlaufs
-- **FinalState**: Letzter Zustand beim Spielende
+Die Komplexität der Aktionsdaten orientiert sich am **App-Reifegrad**:
 
-Jede Aktion enthält:
-- `timestamp`: ISO 8601 Zeitstempel (eindeutige Sortierung)
-- `turnNumber`: Zugnummer (für Statistik)
+| Grad | Action-Felder | Beispiel |
+|------|---------------|----------|
+| **1** | Minimal | `{ turn, source, target, type, value }` |
+| **2** | Erweitert | + `id`, `timestamp`, `poison`, `commander` |
+| **3** | Vollständig | + `effects[]`, `cardName`, `reason` |
 
-#### Action Types & Beschreibungen
+#### Action Types
 
-| Type | Beschreibung | Effekt |
-|------|-------------|--------|
-| `damage` | Direkter Schaden | Lebenspunkte des Ziels um X reduzieren |
-| `heal` | Lebensgewinn | Lebenspunkte des Ziels um X erhöhen |
-| `poison` | Giftzähler | Gift-Variable des Ziels um X erhöhen |
-| `commander` | Commander-Schaden | Commander-Variable (Paar Quelle+Ziel) um X erhöhen |
-| `drain_heal` | Lebensentzug (Zulaport-Style) | Alle Gegner -X Leben, Selbst +X Leben pro Gegner |
-| `lifelink_heal` | Lebensdiebstahl | Ziel -X Leben, Selbst +X Leben |
-| `counter` | Custom-Zähler | Benutzerdefinierte Variable (Experience, Energy, etc.) |
-| `defeat` | Spieler besiegt | **Manueller Button** - setzt Spieler-Status auf "defeated" |
-| `victory` | Spiel beendet | **Manueller Button** - beendet das Spiel |
+| Type | Beschreibung | Grad |
+|------|-------------|------|
+| `damage` | Schaden an Leben | 1 |
+| `heal` | Lebensgewinn | 1 |
+| `poison` | Giftzähler | 2 |
+| `commander` | Commander-Schaden | 2 |
+| `drain_heal` | Lebensentzug (Zulaport) | 3 |
+| `lifelink_heal` | Lebensdiebstahl | 3 |
+| `counter` | Custom-Zähler | 3 |
+| `defeat` | Manueller Button: Spieler besiegt | 2 |
+| `victory` | Manueller Button: Spiel beendet | 2 |
 
-**Hinweis zu `defeat` und `victory`**: Diese sind **ausschließlich manuelle Aktionen** über Buttons. MTG-Karteneffekte können direkt einen Spieler besiegen oder gewinnen lassen - dies wird über diese manuellen Buttons ausgelöst, NICHT automatisch durch Lebenspunkte.
-
-```typescript
-type ActionType = 
-  | 'damage'        // Direkter Schaden
-  | 'heal'          // Heilung
-  | 'poison'         // Giftzähler
-  | 'commander'     // Commander-Schaden
-  | 'drain_heal'    // Lebensentzug
-  | 'lifelink_heal' // Lebensdiebstahl
-  | 'counter'       // Custom-Zähler
-  | 'defeat'        // Manuell: Spieler besiegt
-  | 'victory';      // Manuell: Spiel beendet
+**Hinweis**: `defeat` und `victory` sind **ausschließlich manuelle Aktionen** über Buttons.
 ```
 
 **Geplant für Zukunft (Grad 3+):**
