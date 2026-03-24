@@ -1,8 +1,8 @@
 # MTG Commander Tracker - Konzeptdokument
 
-> **Version**: 0.1.0 (Draft)  
+> **Version**: 0.2.0 (Draft)  
 > **Status**: In Planung  
-> **Zuletzt aktualisiert**: 2026-03-23
+> **Zuletzt aktualisiert**: 2026-03-24
 
 ---
 
@@ -64,16 +64,52 @@ Die App folgt einem **Reifegrad-Modell** (Maturity Model). Die Kern-Architektur 
 ```typescript
 interface Game {
   id: string;
+  version: string;
+  createdAt: string;           // ISO 8601
+  
+  meta: {
+    format: 'commander';
+    date: string;
+    duration: number;          // Sekunden
+    winningPlayerId: string | null;
+    winningReason: string | null;
+  };
+  
   players: Player[];
+  
+  turns: Turn[];
+  
+  actions: Action[];           // Alle Aktionen (für Grad 1: nur damage/heal)
+  
   finalState: FinalState;
-  winner: string | null;
-  duration: number; // Sekunden
 }
 
 interface Player {
   id: string;
   name: string;
-  life: number;
+  commander: string | null;
+  seat: number;
+  life: number;                // Start: 40
+  isWinner: boolean;
+}
+
+interface Turn {
+  number: number;
+  playerId: string;
+  startTime: string;
+  endTime: string | null;
+}
+
+interface Action {
+  id: string;
+  turnNumber: number;
+  timestamp: string;
+  type: 'damage' | 'heal';    // Grad 1: Nur diese beiden
+  source: { playerId: string; playerName: string } | null;
+  targets: { playerId: string; playerName: string }[];
+  value: number;
+  previousValue: number;
+  resultingValue: number;
 }
 
 interface FinalState {
@@ -88,6 +124,192 @@ interface FinalState {
 - **PWA**: vite-plugin-pwa
 - **Styling**: Vanilla CSS (kein Framework)
 - **Speicher**: localStorage
+
+---
+
+### Action Logging Konzept
+
+#### Grundprinzip
+
+Jede Aktion im Spiel wird als eigenständiger Eintrag gespeichert. Dies ermöglicht:
+
+1. **Undo/Redo**: Jede Aktion kann rückgängig gemacht werden
+2. **Action Log**: Vollständige Historie während des Spiels einsehbar
+3. **Export**: Alle Aktionen werden in JSON exportiert
+
+#### Action Types
+
+```typescript
+type ActionType = 
+  | 'damage'        // Schaden an Leben
+  | 'heal'          // Heilung
+  | 'poison'         // Giftzähler
+  | 'commander'     // Commander-Schaden
+  | 'drain_heal'    // Lebensentzug (Selbst +X, Alle Gegner -X)
+  | 'lifelink_heal' // Lebensdiebstahl (Selbst +X, Ziel -X)
+  | 'token'         // Token erstellt/zerstört
+  | 'counter'       // Zähler (Experience, Energy, etc.)
+  | 'phase'         // Phasen-Änderung
+  | 'roll'          // Würfelwurf
+  | 'coin'          // Münzwurf
+  | 'defeat'        // Spieler besiegt
+  | 'victory';      // Spiel beendet
+```
+
+#### Aktions-Struktur
+
+Jede Aktion besteht aus:
+
+| Feld | Beschreibung | Optional |
+|------|-------------|----------|
+| `id` | Eindeutige ID der Aktion | Nein |
+| `turnNumber` | Zugnummer | Nein |
+| `timestamp` | Zeitstempel der Aktion | Nein |
+| `type` | Art der Aktion (siehe Action Types) | Nein |
+| `source` | Quelle der Aktion | Ja |
+| `targets` | Ziel/e der Aktion | Nein |
+| `value` | Wert der Änderung | Ja |
+| `previousValue` | Wert vor der Änderung | Ja |
+| `resultingValue` | Wert nach der Änderung | Ja |
+
+#### Quellen (Source)
+
+Die Quelle beschreibt wer die Aktion auslöst:
+
+```typescript
+interface ActionSource {
+  type: 'player' | 'card' | 'game';
+  playerId?: string;     // Spieler-ID
+  playerName?: string;   // Spieler-Name
+  cardName?: string;     // Kartenname (z.B. "Lightning Bolt")
+  description?: string;  // Freitext (z.B. "Commander Damage")
+}
+```
+
+**Beispiele:**
+- Spieler greift an: `{ type: 'player', playerId: 'p1', playerName: 'Alice' }`
+- Karte macht Schaden: `{ type: 'card', cardName: 'Lightning Bolt' }`
+- Gift von Konfrontation: `{ type: 'card', cardName: 'Tainted Strike' }`
+- Game-Ende: `{ type: 'game' }`
+
+#### Ziele (Targets)
+
+Die Ziele beschreiben wen die Aktion betrifft (ein oder mehrere):
+
+```typescript
+interface ActionTarget {
+  type: 'player' | 'all_players' | 'opponents' | 'self' | 'game';
+  playerId?: string;
+  playerName?: string;
+}
+```
+
+**Beispiele:**
+- Einzelnes Ziel: `{ type: 'player', playerId: 'p2', playerName: 'Bob' }`
+- Alle Spieler: `{ type: 'all_players' }`
+- Nur Gegner: `{ type: 'opponents', sourcePlayerId: 'p1' }`
+- Selbst: `{ type: 'self', playerId: 'p1' }`
+
+#### Komplexe Aktionen
+
+Manche Aktionen betreffen mehrere Ziele gleichzeitig:
+
+**Drain Heal (Zulaport Blossom-Style):**
+```json
+{
+  "id": "action-123",
+  "turnNumber": 5,
+  "type": "drain_heal",
+  "source": { "type": "player", "playerId": "p1", "playerName": "Alice" },
+  "targets": [
+    { "type": "opponents", "sourcePlayerId": "p1" },
+    { "type": "self", "playerId": "p1" }
+  ],
+  "value": 3,
+  "effects": [
+    { "targetPlayerId": "p1", "targetPlayerName": "Alice", "action": "heal", "value": 9 },
+    { "targetPlayerId": "p2", "targetPlayerName": "Bob", "action": "damage", "value": 3 },
+    { "targetPlayerId": "p3", "targetPlayerName": "Charlie", "action": "damage", "value": 3 }
+  ]
+}
+```
+
+**Commander Damage:**
+```json
+{
+  "id": "action-124",
+  "turnNumber": 6,
+  "type": "commander",
+  "source": { "type": "card", "cardName": "Edgar Markov" },
+  "targets": [
+    { "type": "player", "playerId": "p2", "playerName": "Bob" }
+  ],
+  "value": 3,
+  "totalDamageFromSource": 9,
+  "previousLife": 35,
+  "resultingLife": 32
+}
+```
+
+#### JSON Export Struktur
+
+```typescript
+interface GameExport {
+  id: string;
+  version: string;
+  type: 'game';
+  createdAt: string;           // ISO 8601
+  
+  meta: {
+    format: 'commander';
+    date: string;              // YYYY-MM-DD
+    startTime: string;        // ISO 8601
+    endTime: string | null;   // ISO 8601
+    duration: number;          // Sekunden
+    winningPlayerId: string | null;
+    winningReason: string | null;
+  };
+  
+  players: Player[];
+  
+  turns: Turn[];
+  
+  actions: Action[];
+  
+  finalState: FinalState;
+  
+  defeatedPlayers: DefeatedPlayer[];
+}
+```
+
+#### UI-Konzepte für Actions
+
+**Action Log Anzeige:**
+```
+┌─────────────────────────────────────┐
+│ Zug 5 - Alice                        │
+├─────────────────────────────────────┤
+│ ⚔️ Alice greift Bob an              │
+│    Lightning Bolt → Bob -3 Leben      │
+│    (35 → 32)                        │
+├─────────────────────────────────────┤
+│ 💀 Bob besiegt Charlie               │
+│    Grund: Commander Damage            │
+│    (Edgar Markov: 21/21)            │
+└─────────────────────────────────────┘
+```
+
+**Undo-Panel:**
+```
+┌─────────────────────────────────────┐
+│ Verlauf (Undo möglich)              │
+├─────────────────────────────────────┤
+│ [✓] Zug 5: Alice → Bob -3 Leben    │
+│ [✓] Zug 4: Heal +5                 │
+│ [✓] Zug 3: Commander 7 Schaden      │
+│ [✗] Zug 2: (bereits rückgängig)   │
+└─────────────────────────────────────┘
+```
 
 ---
 
@@ -114,13 +336,22 @@ interface Game {
   version: string;
   createdAt: string; // ISO 8601
   
+  meta: {
+    format: 'commander';
+    date: string;
+    startTime: string;
+    endTime: string | null;
+    duration: number;
+    winningPlayerId: string | null;
+    winningReason: string | null;
+  };
+  
   players: Player[];
   actions: Action[];
   turns: Turn[];
   
   finalState: FinalState;
-  winner: Winner | null;
-  duration: number;
+  defeatedPlayers: DefeatedPlayer[];
 }
 
 interface Player {
@@ -128,25 +359,64 @@ interface Player {
   name: string;
   commander: string | null;
   seat: number;
+  life: number;       // Aktuelles Leben
+  poison: number;      // Giftzähler
+  isDefeated: boolean;
+  isWinner: boolean;
+}
+
+interface ActionSource {
+  type: 'player' | 'card' | 'game';
+  playerId?: string;
+  playerName?: string;
+  cardName?: string;
+}
+
+interface ActionTarget {
+  type: 'player' | 'all_players' | 'opponents' | 'self' | 'game';
+  playerId?: string;
+  playerName?: string;
 }
 
 interface Action {
   id: string;
   turnNumber: number;
   timestamp: string;
-  type: 'damage' | 'heal' | 'poison' | 'commander_damage' | 'defeat' | 'victory';
-  source: { id: string; name: string } | null;
-  target: { id: string; name: string };
+  type: ActionType;
+  source: ActionSource | null;
+  targets: ActionTarget[];
   value: number;
-  previousLife?: number;
-  resultingLife?: number;
+  previousValue?: number;    // Leben/Gift vor der Aktion
+  resultingValue?: number;   // Leben/Gift nach der Aktion
+  
+  // Commander-spezifisch
+  cardName?: string;        // Kartenname bei Commander-Schaden
+  totalDamageFromSource?: number; // Gesamtschaden von dieser Quelle
+  
+  // Komplexe Aktionen
+  effects?: ActionEffect[];  // Bei Multi-Target Aktionen
+  
+  // System-Aktionen
+  reason?: string;          // Grund bei defeat/victory
+  eliminatedBy?: string;     // Wer hat besiegt
+}
+
+interface ActionEffect {
+  targetPlayerId: string;
+  targetPlayerName: string;
+  action: 'damage' | 'heal' | 'poison' | 'commander';
+  value: number;
+  previousValue: number;
+  resultingValue: number;
 }
 
 interface Turn {
   number: number;
   playerId: string;
+  playerName: string;
   startTime: string;
   endTime: string | null;
+  duration: number; // Sekunden
 }
 
 interface FinalState {
@@ -155,9 +425,12 @@ interface FinalState {
   commanderDamage: Record<string, number>; // "sourceId-targetId" -> damage
 }
 
-interface Winner {
+interface DefeatedPlayer {
   playerId: string;
-  reason: 'last_standing' | 'concession' | 'other';
+  playerName: string;
+  reason: 'life' | 'poison' | 'commander_damage' | 'concession' | 'other';
+  eliminatedBy: string | null;
+  turnEliminated: number;
 }
 ```
 
