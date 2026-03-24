@@ -1,6 +1,6 @@
 # MTG Commander Tracker - Konzeptdokument
 
-> **Version**: 0.2.0 (Draft)  
+> **Version**: 0.3.0 (Draft)  
 > **Status**: In Planung  
 > **Zuletzt aktualisiert**: 2026-03-24
 
@@ -137,24 +137,51 @@ Jede Aktion im Spiel wird als eigenständiger Eintrag gespeichert. Dies ermögli
 2. **Action Log**: Vollständige Historie während des Spiels einsehbar
 3. **Export**: Alle Aktionen werden in JSON exportiert
 
-#### Action Types
+#### Reihenfolge & Zeitstempel
+
+Die Reihenfolge der Aktionen ist **kritisch** für:
+- **Undo/Redo**: Letzte Aktion kann mit "Undo" rückgängig gemacht werden
+- **Statistik**: Analyse des Spielverlaufs
+- **FinalState**: Letzter Zustand beim Spielende
+
+Jede Aktion enthält:
+- `timestamp`: ISO 8601 Zeitstempel (eindeutige Sortierung)
+- `turnNumber`: Zugnummer (für Statistik)
+
+#### Action Types & Beschreibungen
+
+| Type | Beschreibung | Effekt |
+|------|-------------|--------|
+| `damage` | Direkter Schaden | Lebenspunkte des Ziels um X reduzieren |
+| `heal` | Lebensgewinn | Lebenspunkte des Ziels um X erhöhen |
+| `poison` | Giftzähler | Gift-Variable des Ziels um X erhöhen |
+| `commander` | Commander-Schaden | Commander-Variable (Paar Quelle+Ziel) um X erhöhen |
+| `drain_heal` | Lebensentzug (Zulaport-Style) | Alle Gegner -X Leben, Selbst +X Leben pro Gegner |
+| `lifelink_heal` | Lebensdiebstahl | Ziel -X Leben, Selbst +X Leben |
+| `counter` | Custom-Zähler | Benutzerdefinierte Variable (Experience, Energy, etc.) |
+| `defeat` | Spieler besiegt | **Manueller Button** - setzt Spieler-Status auf "defeated" |
+| `victory` | Spiel beendet | **Manueller Button** - beendet das Spiel |
+
+**Hinweis zu `defeat` und `victory`**: Diese sind **ausschließlich manuelle Aktionen** über Buttons. MTG-Karteneffekte können direkt einen Spieler besiegen oder gewinnen lassen - dies wird über diese manuellen Buttons ausgelöst, NICHT automatisch durch Lebenspunkte.
 
 ```typescript
 type ActionType = 
-  | 'damage'        // Schaden an Leben
+  | 'damage'        // Direkter Schaden
   | 'heal'          // Heilung
   | 'poison'         // Giftzähler
   | 'commander'     // Commander-Schaden
-  | 'drain_heal'    // Lebensentzug (Selbst +X, Alle Gegner -X)
-  | 'lifelink_heal' // Lebensdiebstahl (Selbst +X, Ziel -X)
-  | 'token'         // Token erstellt/zerstört
-  | 'counter'       // Zähler (Experience, Energy, etc.)
-  | 'phase'         // Phasen-Änderung
-  | 'roll'          // Würfelwurf
-  | 'coin'          // Münzwurf
-  | 'defeat'        // Spieler besiegt
-  | 'victory';      // Spiel beendet
+  | 'drain_heal'    // Lebensentzug
+  | 'lifelink_heal' // Lebensdiebstahl
+  | 'counter'       // Custom-Zähler
+  | 'defeat'        // Manuell: Spieler besiegt
+  | 'victory';      // Manuell: Spiel beendet
 ```
+
+**Geplant für Zukunft (Grad 3+):**
+- `token` - Token erstellt/zerstört
+- `phase` - Phasen-Änderung
+- `roll` - Würfelwurf
+- `coin` - Münzwurf
 
 #### Aktions-Struktur
 
@@ -331,6 +358,17 @@ interface GameExport {
 #### Erweitertes Datenmodell (Grad 2)
 
 ```typescript
+type ActionType = 
+  | 'damage'        // Leben -X
+  | 'heal'          // Leben +X
+  | 'poison'        // Gift +X
+  | 'commander'     // Commander-Schaden +X (Paar Quelle+Ziel)
+  | 'drain_heal'   // Alle Gegner -X, Selbst +X pro Gegner
+  | 'lifelink_heal'// Ziel -X, Selbst +X
+  | 'counter'       // Custom-Zähler (Experience, Energy, etc.)
+  | 'defeat'        // Manueller Button: Spieler besiegt
+  | 'victory';      // Manueller Button: Spiel beendet
+
 interface Game {
   id: string;
   version: string;
@@ -381,7 +419,7 @@ interface ActionTarget {
 interface Action {
   id: string;
   turnNumber: number;
-  timestamp: string;
+  timestamp: string;        // ISO 8601 - für Reihenfolge & Undo/Redo
   type: ActionType;
   source: ActionSource | null;
   targets: ActionTarget[];

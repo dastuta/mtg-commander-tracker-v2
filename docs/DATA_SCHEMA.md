@@ -80,21 +80,23 @@ Game
 
 ## Action Types
 
-| Type | Beschreibung |
-|------|--------------|
-| `damage` | Direkter Schaden an Leben |
-| `heal` | Lebensgewinn |
-| `poison` | Giftzähler |
-| `commander` | Commander-Schaden |
-| `drain_heal` | Lebensentzug (Zulaport-Style) |
-| `lifelink_heal` | Lebensdiebstahl |
-| `token` | Token erstellt/zerstört |
-| `counter` | Zähler (Experience, Energy, etc.) |
-| `phase` | Phasen-Änderung |
-| `roll` | Würfelwurf |
-| `coin` | Münzwurf |
-| `defeat` | Spieler besiegt |
-| `victory` | Spiel beendet |
+| Type | Beschreibung | Implementierung |
+|------|-------------|------------------|
+| `damage` | Direkter Schaden | Lebenspunkte des Ziels um X reduzieren |
+| `heal` | Lebensgewinn | Lebenspunkte des Ziels um X erhöhen |
+| `poison` | Giftzähler | Gift-Variable des Ziels um X erhöhen |
+| `commander` | Commander-Schaden | Commander-Variable (Paar Quelle+Ziel) um X erhöhen |
+| `drain_heal` | Lebensentzug | Alle Gegner -X Leben, Selbst +X Leben pro Gegner |
+| `lifelink_heal` | Lebensdiebstahl | Ziel -X Leben, Selbst +X Leben |
+| `counter` | Custom-Zähler | Benutzerdefinierte Variable (Experience, Energy, etc.) |
+| `defeat` | **Manueller Button** | Spieler-Status auf "defeated" setzen |
+| `victory` | **Manueller Button** | Spiel beenden, Gewinner festlegen |
+
+**Wichtig**: `defeat` und `victory` sind **ausschließlich manuelle Aktionen**. 
+MTG-Karteneffekte können Spieler direkt besiegen oder zum Gewinner machen - 
+dies wird über UI-Buttons ausgelöst, NICHT automatisch durch Lebenspunkte.
+
+**Geplant für Zukunft (Grad 3+):** `token`, `phase`, `roll`, `coin`
 
 ---
 
@@ -314,12 +316,14 @@ Alle Action Types, Commander Damage, komplexe Aktionen.
 ## TypeScript Interfaces
 
 ```typescript
+// Grad 1-2: Aktuelle Action Types
 type ActionType = 
   | 'damage' | 'heal' | 'poison' | 'commander'
   | 'drain_heal' | 'lifelink_heal'
-  | 'token' | 'counter' | 'phase'
-  | 'roll' | 'coin'
-  | 'defeat' | 'victory';
+  | 'counter' | 'defeat' | 'victory';
+
+// Grad 3+: Future Action Types
+// | 'token' | 'phase' | 'roll' | 'coin';
 
 interface ActionSource {
   type: 'player' | 'card' | 'game';
